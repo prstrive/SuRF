@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 #### 2. DTU Dataset
 
-We only train our model on DTU dataset. We adopt the full resolution ground-truth depth maps (just for testing) and RGB images, and use the camera parameters prepocessed by CasMVSNet or MVSNet. Simply, please follow the instruction [here](https://github.com/prstrive/UniMVSNet/tree/main#2-dtu-dataset) of UniMVSNet to prepare the dataset. We generate pseudo point clouds through RC-MVSNet to assist the model optimization, and download them from [here](https://drive.google.com/file/d/1OyPoj56wV3OEPctIKUbrCEOh0sPQTKo9/view?usp=sharing). The final data structure is just like this:
+We only train our model on DTU dataset. We adopt the full resolution ground-truth depth maps (just for testing) and RGB images, and use the camera parameters prepocessed by CasMVSNet or MVSNet. Simply, please follow the instruction [here](https://github.com/prstrive/UniMVSNet/tree/main#2-dtu-dataset) of UniMVSNet to prepare the dataset. We generate [pseudo points]() and [pseudo depths]() through RC-MVSNet to assist the model optimization, download and unzip them. The final data structure is just like this:
 ```
 dtu_training                          
   ├── Cameras
@@ -30,6 +30,7 @@ dtu_training
     ├── ...             
     ├── pair.txt
   ├── Depths_raw
+  ├── Pseudo_depths
   ├── Pseudo_points
   └── Rectified_raw
 ```

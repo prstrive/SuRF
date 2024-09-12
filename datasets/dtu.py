@@ -309,14 +309,9 @@ class DTUDataset(Dataset):
                 
             depth_filename = os.path.join(self.data_dir, 'Depths_raw/{}/depth_map_{:0>4}.pfm'.format(scan, vid))
             
-            pseudo_mvs_depth_filename = os.path.join(self.data_dir, 'PseudoMVSScore/dtu_exp/{}/filtered_avg_depth/{:0>8}.pfm'.format(scan, vid))
+            pseudo_mvs_depth_filename = os.path.join(self.data_dir, 'Pseudo_depths/{}/{:0>8}.pfm'.format(scan, vid))
             
-            # pseudo_norm_filename = os.path.join(self.data_dir, 'val_normal/{}/{}_epoch0.npy'.format(scan, vid))
-
-            if self.mode == "val":
-                mask_filename = os.path.join(self.data_dir, 'neus_data/data_DTU/dtu_{}/mask/{:0>3}.png'.format(scan, vid))
-            else:
-                mask_filename = os.path.join(self.data_dir, 'Depths_raw/{}/depth_visual_{:0>4}.png'.format(scan, vid))
+            mask_filename = os.path.join(self.data_dir, 'Depths_raw/{}/depth_visual_{:0>4}.png'.format(scan, vid))
             
             cam_file = os.path.join(self.data_dir, 'Cameras/{:0>8}_cam.txt').format(vid)
             
@@ -334,7 +329,6 @@ class DTUDataset(Dataset):
             if i==0:
                 ref_depth = self.read_depth(depth_filename)
                 ref_pseudo_mvs_depth = self.read_depth(pseudo_mvs_depth_filename)
-                # ref_normal = self.read_numpy(pseudo_norm_filename) if self.mode=="train" else img
                 
             if i==src_idx:
                 src_depth = self.read_depth(depth_filename)
@@ -377,14 +371,12 @@ class DTUDataset(Dataset):
         ref_pseudo_mvs_depth = torch.from_numpy(ref_pseudo_mvs_depth.astype(np.float32))
         src_pseudo_mvs_depth = torch.from_numpy(src_pseudo_mvs_depth.astype(np.float32))
         src_depth = torch.from_numpy(src_depth.astype(np.float32))
-        # ref_normal = torch.from_numpy(ref_normal.astype(np.float32))
-        masks = torch.from_numpy(np.stack(masks).astype(np.float32))
 
         imgs = torch.from_numpy(np.stack(imgs).astype(np.float32))
         intrs = torch.from_numpy(np.stack(new_intrs).astype(np.float32))
         c2ws = torch.from_numpy(np.stack(c2ws).astype(np.float32))
         near_fars = torch.from_numpy(np.stack(new_near_fars).astype(np.float32))
-        # masks = torch.from_numpy(np.stack(masks).astype(np.float32))
+        masks = torch.from_numpy(np.stack(masks).astype(np.float32))
         # depths = torch.from_numpy(np.stack(new_depths).astype(np.float32))
         # pseudo_mvs_depths = torch.from_numpy(np.stack(new_pseudo_mvs_depths).astype(np.float32))
         
@@ -403,10 +395,8 @@ class DTUDataset(Dataset):
         if self.mode == "train":
             assert self.n_rays>0, "No sampling rays!"
             
-            # src_n_rays = self.n_rays // 3
             ref_n_rays = self.n_rays
             
-            # ref_mask = masks[0]
             p_valid = pixel_all[masks[0] > 0.5]  # [num, 2]
             pixels_x_i = torch.randint(low=0, high=self.img_hw[1], size=[ref_n_rays // 4])
             pixels_y_i = torch.randint(low=0, high=self.img_hw[0], size=[ref_n_rays // 4])
@@ -417,16 +407,6 @@ class DTUDataset(Dataset):
 
             pixels_x = torch.cat([pixels_x, pixels_x_i], dim=0)
             pixels_y = torch.cat([pixels_y, pixels_y_i], dim=0)
-            
-            # src_mask = masks[src_idx]
-            # src_p_valid = pixel_all[src_mask > 0.5]  # [num, 2]
-            # src_random_idx = torch.randint(low=0, high=src_p_valid.shape[0], size=[src_n_rays])
-            # src_p_select = src_p_valid[src_random_idx]
-            # src_pixels_x = src_p_select[:, 0]
-            # src_pixels_y = src_p_select[:, 1]
-
-            # pixels_x = torch.randint(low=0, high=self.img_hw[1], size=[self.n_rays])
-            # pixels_y = torch.randint(low=0, high=self.img_hw[0], size=[self.n_rays])
 
         else:
             bound_min=torch.tensor([-1, -1, -1], dtype=torch.float32)
@@ -442,7 +422,6 @@ class DTUDataset(Dataset):
             pixels_x, pixels_y = pixels_x.reshape(-1), pixels_y.reshape(-1)
         
         pseudo_depth = ref_pseudo_mvs_depth[(pixels_y.long(), pixels_x.long())]   # n_rays
-        # normal = ref_normal[(pixels_y.long(), pixels_x.long())] # n_rays, 3
         color = imgs[0][(pixels_y.long(), pixels_x.long())]    # n_rays, 3
         depth = ref_depth[(pixels_y.long(), pixels_x.long())]   # n_rays
         mask = masks[0][(pixels_y.long(), pixels_x.long())]   # n_rays
@@ -452,49 +431,12 @@ class DTUDataset(Dataset):
         rays_d = torch.matmul(c2ws[0, None, :3, :3], rays_d[:, :, None]).squeeze()  # n_rays, 3
         rays_o = c2ws[0, None, :3, 3].expand(rays_d.shape) # n_rays, 3
         near, far = near_fars[0].reshape(1, 2).split(split_size=1, dim=1)
-            
-        # pixel_all = pixel_all.reshape(-1, 2)
-        # pixel_all = torch.cat([pixel_all, torch.ones_like(pixel_all[:, :1])], dim=-1).float()  # n_rays, 3
-        # cam_pixel_all = torch.matmul(intrs.inverse()[0, None, :3, :3], pixel_all[:, :, None]).squeeze() # n_rays, 3
-        # rays_d_all = cam_pixel_all / torch.linalg.norm(cam_pixel_all, ord=2, dim=-1, keepdim=True)    # n_rays, 3
-        # rays_d_all = torch.matmul(c2ws[0, None, :3, :3], rays_d_all[:, :, None]).squeeze()  # n_rays, 3
-        # rays_o_all = c2ws[0, None, :3, 3].expand(rays_d_all.shape) # n_rays, 3
-        # rays_d_all = rays_d_all.reshape(self.img_hw[0], self.img_hw[1], 3)
-        # rays_o_all = rays_o_all.reshape(self.img_hw[0], self.img_hw[1], 3)
         
-        # src_cam_pixel_all = torch.matmul(intrs.inverse()[src_idx, None, :3, :3], pixel_all[:, :, None]).squeeze() # n_rays, 3
-        # src_rays_d_all = src_cam_pixel_all / torch.linalg.norm(src_cam_pixel_all, ord=2, dim=-1, keepdim=True)    # n_rays, 3
-        # src_rays_d_all = torch.matmul(c2ws[src_idx, None, :3, :3], src_rays_d_all[:, :, None]).squeeze()  # n_rays, 3
-        # src_rays_o_all = c2ws[src_idx, None, :3, 3].expand(src_rays_d_all.shape) # n_rays, 3
-        # src_rays_d_all = src_rays_d_all.reshape(self.img_hw[0], self.img_hw[1], 3)
-        # src_rays_o_all = src_rays_o_all.reshape(self.img_hw[0], self.img_hw[1], 3)
-        # src_near, src_far = near_fars[src_idx].reshape(1, 2).split(split_size=1, dim=1)
-        
-        # p_mask = (ref_pseudo_mvs_depth > 0) & (masks[0] > 0)
-        # # ref_pseudo_depth = depths[0]
-        # # p_mask = (depths[0] > 0)
-        # y, x = torch.meshgrid(torch.arange(0, self.img_hw[0]), torch.arange(0, self.img_hw[1]))
-        # x = x[p_mask].type_as(intrs)
-        # y = y[p_mask].type_as(intrs)
-        # p_depth = ref_pseudo_mvs_depth[p_mask]
-        # random_idx = torch.randint(low=0, high=x.shape[0], size=[2048])
-        # x = x[random_idx]
-        # y = y[random_idx]
-        # p_depth = p_depth[random_idx]
-        # xyz_ref = torch.matmul(intrs.inverse()[0, :3, :3], torch.stack((x, y, torch.ones_like(x)), dim=0) * p_depth.unsqueeze(0))
-        # xyz_world = torch.matmul(c2ws[0], torch.cat((xyz_ref, torch.ones_like(x).unsqueeze(0)), dim=0))[:3]
-        # pseudo_pts = xyz_world.permute(1, 0)
-        
-        pcd = PlyData.read(os.path.join(self.data_dir, "PseudoMVSDepth/mvsnet{:0>3}_l3.ply".format(int(scan[4:]))))
+        pcd = PlyData.read(os.path.join(self.data_dir, "Pseudo_points/mvsnet{:0>3}_l3.ply".format(int(scan[4:]))))
         px = pcd['vertex']['x']
         py = pcd['vertex']['y']
         pz = pcd['vertex']['z']
         pxyz_ori = np.stack([px, py, pz], axis=1)
-        
-        # random_split = random.randint(0, 2)
-        # lmdb_key = (scan+"_{}".format(random_split)).encode()
-        # lmdb_stream = self.txn.get(lmdb_key)
-        # pxyz_ori = load_and_decompress(lmdb_stream)
         
         random_idx = np.random.randint(low=0, high=pxyz_ori.shape[0], size=[2048])
         pxyz = pxyz_ori[random_idx]
@@ -502,36 +444,10 @@ class DTUDataset(Dataset):
         pseudo_pts = (pxyz - scale_mat[:3, 3][None]) / scale_mat[0, 0]
         pseudo_pts = torch.from_numpy(pseudo_pts)
         
-        # pxyz_ori = self.pxyz_oris[scan]
-        # random_idx = torch.randint(low=0, high=pxyz_ori.shape[0], size=[2048])
-        # pxyz = pxyz_ori[random_idx]
-        # pxyz = torch.matmul(torch.from_numpy(w2c_ref), torch.cat([pxyz, torch.ones_like(pxyz[..., :1])], dim=1)[..., None])[:, :3, 0]
-        # pseudo_pts = (pxyz - torch.from_numpy(scale_mat)[:3, 3][None]) / scale_mat[0, 0]
-        
-        # min_pts = np.min(pxyz_ori, axis=0)[None]
-        # max_pts = np.max(pxyz_ori, axis=0)[None]
-        # min_pts = np.matmul(w2c_ref, np.concatenate([min_pts, np.ones_like(min_pts[..., :1])], axis=1)[..., None])[:, :3, 0]
-        # min_pts = (min_pts - scale_mat[:3, 3][None]) / scale_mat[0, 0]
-        # max_pts = np.matmul(w2c_ref, np.concatenate([max_pts, np.ones_like(max_pts[..., :1])], axis=1)[..., None])[:, :3, 0]
-        # max_pts = (max_pts - scale_mat[:3, 3][None]) / scale_mat[0, 0]
-        # rand_x = np.random.rand(512) * 2 - 1
-        # rand_y = np.random.rand(512) * 2 - 1
-        # in_pts = (rand_x >= min_pts[0, 0]) & (rand_x <= max_pts[0, 0]) & (rand_y >= min_pts[0, 1]) & (rand_y <= max_pts[0, 1])
-        # rand_z = np.random.rand(512) * 2 - 1
-        # lower_bnd = np.random.rand(np.sum(~in_pts)) < 0.5
-        # rand_z_out = (np.random.rand(np.sum(~in_pts)) * (min_pts[0, 2] + 1) - 1) * lower_bnd + (np.random.rand(np.sum(~in_pts)) * (1 - max_pts[0, 2]) + max_pts[0, 2]) * (1 - lower_bnd)
-        # rand_z[~in_pts] = rand_z_out
-        # sparse_pts = np.stack([rand_x, rand_y, rand_z], axis=-1)
-        # sparse_pts = torch.from_numpy(sparse_pts.astype(np.float32))
-        # random_sparse_pts = torch.rand([512, 3]) * 2 - 1  # normalized to (-1, 1)
-        # sparse_pts = torch.cat([sparse_pts, random_sparse_pts], dim=0)
-        
         outputs.update({
-            # "sparse_pts": sparse_pts,
             "pixels_x": pixels_x,
             "pixels_y": pixels_y,
             "near_fars": near_fars,
-            # "normal": normal,
             "rays_o": rays_o,
             "rays_d": rays_d,
             "near": near,
@@ -540,34 +456,17 @@ class DTUDataset(Dataset):
             "depth": depth,
             "pseudo_depth": pseudo_depth,
             "mask": mask,
-            # "rays_d_all": rays_d_all,
-            # "rays_o_all": rays_o_all,
             "mask_ref": masks[0],
             "depth_ref": ref_depth,
             "pseudo_pts": pseudo_pts,
             "pseudo_depth_ref": ref_pseudo_mvs_depth,
             "pseudo_depth_src": src_pseudo_mvs_depth,
             "src_idx": src_idx,
-            # "src_rays_d_all": src_rays_d_all,
-            # "src_rays_o_all": src_rays_o_all,
             "mask_src": masks[src_idx],
             "depth_src": src_depth,
-            # "src_near": src_near,
-            # "src_far": src_far
         })
 
         return outputs
     
     def __len__(self):
         return len(self.metas)
-    
-    
-if __name__ == "__main__":
-    gt_depth = read_pfm("/amax/data/cas_training/Depths_raw/scan1/depth_map_0000.pfm")[0]
-    pseudo_depth = read_pfm("/amax/data/cas_training/PseudoMVSDepth/scan1/filtered_avg_depth/00000000.pfm")[0]
-    gt_depth = cv2.resize(gt_depth, [640, 480], interpolation=cv2.INTER_NEAREST)
-    pseudo_depth = cv2.resize(pseudo_depth, [640, 480], interpolation=cv2.INTER_NEAREST)
-    
-    dl = (np.abs(gt_depth - pseudo_depth) / (gt_depth + 1e-10) * (gt_depth>0) *  (pseudo_depth>0)).sum() / ((gt_depth>0) *  (pseudo_depth>0)).sum()
-    
-    print(dl)

@@ -283,10 +283,8 @@ class BMVSDataset(Dataset):
         if self.mode == "train":
             assert self.n_rays>0, "No sampling rays!"
             
-            # src_n_rays = self.n_rays // 3
             ref_n_rays = self.n_rays
             
-            # ref_mask = masks[0]
             p_valid = pixel_all[masks[0] > 0.5]  # [num, 2]
             pixels_x_i = torch.randint(low=0, high=self.img_hw[1], size=[ref_n_rays // 4])
             pixels_y_i = torch.randint(low=0, high=self.img_hw[0], size=[ref_n_rays // 4])
@@ -298,16 +296,6 @@ class BMVSDataset(Dataset):
             pixels_x = torch.cat([pixels_x, pixels_x_i], dim=0)
             pixels_y = torch.cat([pixels_y, pixels_y_i], dim=0)
             
-            # src_mask = masks[src_idx]
-            # src_p_valid = pixel_all[src_mask > 0.5]  # [num, 2]
-            # src_random_idx = torch.randint(low=0, high=src_p_valid.shape[0], size=[src_n_rays])
-            # src_p_select = src_p_valid[src_random_idx]
-            # src_pixels_x = src_p_select[:, 0]
-            # src_pixels_y = src_p_select[:, 1]
-
-            # pixels_x = torch.randint(low=0, high=self.img_hw[1], size=[self.n_rays])
-            # pixels_y = torch.randint(low=0, high=self.img_hw[0], size=[self.n_rays])
-
         else:
             bound_min=torch.tensor([-1, -1, -1], dtype=torch.float32)
             bound_max=torch.tensor([1, 1, 1], dtype=torch.float32)

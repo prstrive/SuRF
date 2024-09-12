@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 #### 2. DTU Dataset
 
-We only train our model on DTU dataset. We adopt the full resolution ground-truth depth maps (just for testing) and RGB images, and use the camera parameters prepocessed by CasMVSNet or MVSNet. Simply, please follow the instruction [here](https://github.com/prstrive/UniMVSNet/tree/main#2-dtu-dataset) of UniMVSNet to prepare the dataset. We generate [pseudo points]() and [pseudo depths]() through RC-MVSNet to assist the model optimization, download and unzip them. The final data structure is just like this:
+We only train our model on DTU dataset. We adopt the full resolution ground-truth depth maps (just for testing) and RGB images, and use the camera parameters prepocessed by CasMVSNet or MVSNet. Simply, please follow the instruction [here](https://github.com/prstrive/UniMVSNet/tree/main#2-dtu-dataset) of UniMVSNet to prepare the dataset. We generate [pseudo points]() and [pseudo depths](https://drive.google.com/file/d/1LYxsH345zqAVIPcy67mSZl_4asB8thAZ/view?usp=sharing) through RC-MVSNet to assist the model optimization, download and unzip them. The final data structure is just like this:
 ```
 dtu_training                          
   ├── Cameras
@@ -95,7 +95,7 @@ Download our pretrained model and put it to `<your CKPT path>`.
 		<td>Mean Cham. Dist.↓</td>
 	</tr>
 	<tr align="center">
-    <td><a href="https://drive.google.com/file/d/1c4lvUrSNZxGmagSQf9nU1j6ImWh7OiQq/view?usp=sharing">surf</a></td>
+    <td><a href="https://drive.google.com/file/d/1EKdrcoEW1pedeVkQv69G1gt2f1uLDMSh/view?usp=sharing">surf</a></td>
     <td><a href="https://drive.google.com/drive/folders/1bAvrvaq143GToIIYCaxDnoyr6lKC6wiM?usp=sharing">meshes</a></td>
 		<td>480X640</td>
 		<td>5 (4src)</td>

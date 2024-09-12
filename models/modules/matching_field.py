@@ -5,43 +5,6 @@ import torch.nn.functional as F
 from .projector import lookup_volume
 
 
-def sample_pdf(bins, weights, n_samples, det=False):
-    # This implementation is from NeRF
-    # Get pdf
-    
-    # weights = weights + 1e-5  # prevent nans
-    # pdf = weights / torch.sum(weights, -1, keepdim=True)
-    # cdf = torch.cumsum(pdf, -1)
-    # cdf = torch.cat([torch.zeros_like(cdf[..., :1]), cdf], -1)
-    
-    cdf = torch.cumsum(weights, axis=1) / (weights.sum(axis=1)[:,None] + 1e-6)
-    
-    # Take uniform samples
-    if det:
-        u = torch.linspace(0. + 0.5 / n_samples, 1. - 0.5 / n_samples, steps=n_samples).type_as(weights)
-        u = u.expand(list(cdf.shape[:-1]) + [n_samples])
-    else:
-        u = torch.rand(list(cdf.shape[:-1]) + [n_samples]).type_as(weights)
-
-    # Invert CDF
-    u = u.contiguous()
-    inds = torch.searchsorted(cdf, u, right=True)
-    below = torch.max(torch.zeros_like(inds - 1), inds - 1)
-    above = torch.min((cdf.shape[-1] - 1) * torch.ones_like(inds), inds)
-    inds_g = torch.stack([below, above], -1)  # (batch, N_samples, 2)
-
-    matched_shape = [inds_g.shape[0], inds_g.shape[1], cdf.shape[-1]]
-    cdf_g = torch.gather(cdf.unsqueeze(1).expand(matched_shape), 2, inds_g)
-    bins_g = torch.gather(bins.unsqueeze(1).expand(matched_shape), 2, inds_g)
-
-    denom = (cdf_g[..., 1] - cdf_g[..., 0])
-    denom = torch.where(denom < 1e-5, torch.ones_like(denom), denom)
-    t = (u - cdf_g[..., 0]) / denom
-    samples = bins_g[..., 0] + t * (bins_g[..., 1] - bins_g[..., 0])
-
-    return samples
-
-
 class MatchingField(nn.Module):
     def __init__(self, confs):
         super(MatchingField, self).__init__()
@@ -52,21 +15,11 @@ class MatchingField(nn.Module):
         self.depth_res_levels = confs.get_list("depth_res_levels")
         # self.z_val_ranges = confs.get_list("z_val_ranges")
         
-    def density_render(self, rays_o, rays_d, near, far, c2w, density_volume, stage_idx, perturb=False):
+    def depth_render(self, rays_o, rays_d, near, far, c2w, matching_volume, stage_idx, perturb=False):
         
         rays_o = rays_o.reshape(-1, 3)
         rays_d = rays_d.reshape(-1, 3)
         batch_size = len(rays_o)
-        
-        # sample_dist = (near + 2.0 - far)
-        # # sample_dist = (far - near) / self.n_samples_depths[stage_idx]   # Assuming the region of interest is a unit sphere
-        # z_vals = torch.linspace(0.0, 1.0, self.n_samples_depths[stage_idx]).type_as(near)
-        # z_vals = near + (far - near) * z_vals[None, :]
-        
-        # # perturb = self.perturb
-        # if perturb:
-        #     t_rand = (torch.rand([batch_size, 1]) - 0.5).type_as(z_vals)
-        #     z_vals = z_vals + t_rand * (far - near) / self.n_samples_depths[stage_idx]
             
         num_stages = near.shape[-1]
         all_z_vals = []
@@ -86,61 +39,13 @@ class MatchingField(nn.Module):
         z_vals = torch.cat(all_z_vals, dim=-1)
         z_vals, _ = torch.sort(z_vals, dim=-1)
         
-        # with torch.no_grad():
-        #     n_importance_i = self.n_importance_depths[stage_idx] // self.up_sample_steps[stage_idx]
-        #     for i in range(self.up_sample_steps[stage_idx]):
-        #         pts = rays_o[:, None, :] + rays_d[:, None, :] * z_vals[..., :, None]
-        #         pts = pts.reshape(-1, 3)
-                
-        #         # density = lookup_volume(pts, density_volume, sample_mode='bilinear')
-        #         # density = F.softplus(density).reshape(batch_size, -1)
-        #         # dists = z_vals[:, 1:] - z_vals[:, :-1]
-        #         # dists = torch.cat([dists, sample_dist], -1)
-        #         # # LOG SPACE
-        #         # free_energy = dists * density
-        #         # shifted_free_energy = torch.cat([torch.zeros(dists.shape[0], 1).cuda(), free_energy[:, :-1]], dim=-1)  # shift one step
-        #         # alpha = 1 - torch.exp(-free_energy)  # probability of it is not empty here
-        #         # transmittance = torch.exp(-torch.cumsum(shifted_free_energy, dim=-1))  # probability of everything is empty up to now
-        #         # weights = alpha * transmittance # probability of the ray hits something here
-                
-        #         # alpha = lookup_volume(pts, density_volume, sample_mode='bilinear')
-        #         # weights = alpha * torch.cumprod(torch.cat([torch.ones([batch_size, 1]).type_as(alpha), 1. - alpha + 1e-7], -1), -1)[:, :-1]
-                
-        #         density = lookup_volume(pts, density_volume, sample_mode='bilinear')
-        #         density = density.reshape(batch_size, -1)
-        #         weights = F.softmax(density, dim=-1)
-                
-        #         z_samples = sample_pdf(z_vals, weights, n_importance_i, det=True).detach()
-        #         z_vals = torch.cat([z_vals, z_samples], dim=1)
-        #         z_vals, _ = torch.sort(z_vals, dim=-1)
-        
         pts = rays_o[:, None, :] + rays_d[:, None, :] * z_vals[..., :, None]
         pts = pts.reshape(-1, 3)
         
         pts_norm = torch.linalg.norm(pts, ord=2, dim=-1, keepdim=True).reshape(batch_size, -1)
         outside_sphere = (pts_norm > 1.0).float().detach()
         
-        # density = lookup_volume(pts, density_volume, sample_mode='bilinear')
-        # density = F.softplus(density).reshape(batch_size, -1)
-        # dists = z_vals[:, 1:] - z_vals[:, :-1]
-        # dists = torch.cat([dists, sample_dist], -1)
-        # # LOG SPACE
-        # free_energy = dists * density
-        # shifted_free_energy = torch.cat([torch.zeros(dists.shape[0], 1).cuda(), free_energy[:, :-1]], dim=-1)  # shift one step
-        # alpha = 1 - torch.exp(-free_energy)  # probability of it is not empty here
-        # transmittance = torch.exp(-torch.cumsum(shifted_free_energy, dim=-1))  # probability of everything is empty up to now
-        # weights = alpha * transmittance # probability of the ray hits something here
-        
-        # alpha = lookup_volume(pts, density_volume, sample_mode='bilinear')
-        # weights = alpha * torch.cumprod(torch.cat([torch.ones([batch_size, 1]).type_as(alpha), 1. - alpha + 1e-7], -1), -1)[:, :-1]
-        
-        # pts_mask = lookup_volume(pts, mask_volume, sample_mode='nearest')
-        # pts_mask_bool = (pts_mask > 0).view(-1)
-        # if torch.sum(pts_mask_bool.float()) < 1:
-        #     raise ValueError("No valid pseudo pts!")
-        # density = torch.ones_like(pts[:, :1]) * 1e-9
-        # density[pts_mask_bool] = lookup_volume(pts[pts_mask_bool], density_volume, sample_mode='bilinear')
-        density = lookup_volume(pts, density_volume, sample_mode='bilinear')
+        density = lookup_volume(pts, matching_volume, sample_mode='bilinear')
         density = density.reshape(batch_size, -1)
         weights = F.softmax(density, dim=-1)
         
@@ -165,7 +70,7 @@ class MatchingField(nn.Module):
         
         return render_depth, occ_reg #, z_val_near, z_val_far, depth_min, depth_max
         
-    def forward(self, ipts, density_volume, stage_idx, range_ratios, pre_depths=None, perturb=False):
+    def forward(self, ipts, matching_volume, stage_idx, range_ratios, pre_depths=None, perturb=False):
         near_fars = ipts["near_fars"] # (nv, 2)
         c2ws = ipts["c2ws"]   # (nv, 4, 4)
         intrs = ipts["intrs"]   # (nv, 4, 4)
@@ -222,10 +127,10 @@ class MatchingField(nn.Module):
                 far = far_ori.repeat(rays_o_all.shape[0], 1)
             
             if (i==0) or (i==src_idx):
-                render_depth, occ_reg = self.density_render(rays_o_all, rays_d_all, near, far, c2ws[i], density_volume, stage_idx, perturb)
+                render_depth, occ_reg = self.depth_render(rays_o_all, rays_d_all, near, far, c2ws[i], matching_volume, stage_idx, perturb)
             else:
                 with torch.no_grad():
-                    render_depth, occ_reg = self.density_render(rays_o_all, rays_d_all, near, far, c2ws[i], density_volume, stage_idx, False)
+                    render_depth, occ_reg = self.depth_render(rays_o_all, rays_d_all, near, far, c2ws[i], matching_volume, stage_idx, False)
                     
             render_depth = render_depth.reshape(h, w)
             

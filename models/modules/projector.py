@@ -216,9 +216,13 @@ def grid_sample_3d(volume, optical):
 
 def grid_sample_3d_sparse(sparse_volume, sparse_idx, pts):
     """ 
-    pts: (n_pts, 3)
-    sparse_volume: (n_vox, c)
-    sparse_idx: (nx, ny, nz)
+    function to achieve sparse trilinear sampling in https://github.com/prstrive/SuRF
+    Args:
+        sparse_volume: (n_vox, c)
+        sparse_idx: (nx, ny, nz)
+        pts: (n_pts, 3)
+    outputs:
+        out_val: (n_pts, c)
     """
     n_vox, c = sparse_volume.shape
     n_pts = pts.shape[0]
